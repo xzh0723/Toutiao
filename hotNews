@@ -168,20 +168,25 @@ def mongodb(item):
     db = client.TouTiao
     try:
         db.news.insert(dict(item))
-        print('成功插入数据库')
+        # print('成功插入数据库')
     except Exception as e:
         print('插入数据库失败')
 
 def main():
+    max_page = input('请输入你要下载的最大页数：')
     max_behot_time_tmp = 0
+    num = 1
     while True:
-        #try:
-            result = req_news(max_behot_time_tmp)
-            max_behot_time_tmp = parse(result)
-            print(max_behot_time_tmp)
-            continue
-        #except Exception as e:
-        #    print(e.args)
+        try:
+            if num > int(max_page):
+                break
+            else:
+                result = req_news(max_behot_time_tmp)
+                max_behot_time_tmp = parse(result)
+                # print(max_behot_time_tmp)
+                num += 1
+        except Exception as e:
+            print(e.args)
 
 if __name__ == '__main__':
     main()
