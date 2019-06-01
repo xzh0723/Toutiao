@@ -9,6 +9,8 @@ USER_URL = 'http://m.toutiao.com/profile/{}/'
 
 ARTICLE_URL = 'https://www.toutiao.com/pgc/ma/?'
 
+CONTENT_URL = 'https://m.toutiao.com/i{}/info/?'
+
 headers = {
     'accept': 'application/json, text/javascript',
     'accept-encoding': 'gzip, deflate, br',
@@ -45,6 +47,7 @@ def parse_user(html):
         'follower': soup.select('#followernum')[0].get_text()
     }
     print(userInfo)
+    print('=====' * 100)
     mediaId = re.search("mediaId = '(.*?)' ,", html, re.S).group(1)
     return mediaId
 
@@ -58,10 +61,23 @@ def get_as_cp():
 
     ctx = execjs.compile(js)
     as_cp = ctx.call('get_as_cp')
-    print(as_cp)
+    # print(as_cp)
     as_ = as_cp['as']
     cp = as_cp['cp']
     return as_, cp
+
+def get_signature(item_id):
+    """
+    获取进入详情页所需signature参数
+    :return:
+    """
+    with open('get_signature.js', 'r') as f:
+        js = f.read()
+
+    ctx_ = execjs.compile(js)
+    signature = ctx_.call('get_signature', item_id)
+    # print(signature)
+    return signature
 
 def get_article_list(userId, mediaId, as_, cp, num, max_behot_time=None):
     """
@@ -91,7 +107,7 @@ def get_article_list(userId, mediaId, as_, cp, num, max_behot_time=None):
     result = json.loads(re.search('jsonp{}\((.*?)\)'.format(num), response.text).group(1))
     return result
 
-def parse_list(result):
+def parse(result):
     """
     解析列表页
     :param result:
@@ -103,8 +119,10 @@ def parse_list(result):
         field_map = {
             'abstract': 'abstract',
             'article_url': 'article_url',
+            'item_id': 'item_id',
             'behot_time': 'behot_time',
             'comments_count': 'comments_count',
+            'total_read_count': 'total_read_count',
             'datetime': 'datetime',
             'detail_source': 'detail_source',
             'external_visit_count': 'external_visit_count_format',
@@ -116,14 +134,25 @@ def parse_list(result):
             'label': 'label',
             'title': 'title',
             'tag': 'tag',
-            'total_read_count': 'total_read_count',
         }
         for field, attr in field_map.items():
             info[field] = li[attr]
         info['pass_time'] = li['verify_detail']['pass_time']
         create_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(li['create_time']))
         info['create_time'] = create_time
+        # 进入文章详情页解析获取文章正文
+        item_id = li['item_id']
+        params = {
+            '_signature': get_signature(item_id),
+            'i': item_id
+        }
+        res = requests.get(CONTENT_URL.format(item_id), params=params, headers=headers).json()
+        content = res['data']['content']
+        soup = BeautifulSoup(content, 'lxml')
+        info['content'] = soup.find('div').get_text()
         print(info)
+        print('=====' * 100)
+        #parse_content(res)
     max_behot_time = result['next']['max_behot_time']
     return max_behot_time
 
@@ -137,7 +166,7 @@ if __name__ == '__main__':
     while True:
         try:
             result = get_article_list(userId, mediaId, as_, cp, num, max_behot_time)
-            max_behot_time = parse_list(result)
+            max_behot_time = parse(result)
             if result.get('has_more'):
                 num += 1
                 continue
