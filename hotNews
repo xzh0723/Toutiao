@@ -1,0 +1,191 @@
+from selenium import webdriver
+import requests
+import time
+import json
+import pymongo
+import execjs
+from bs4 import BeautifulSoup
+from selenium.webdriver.chrome.options import Options
+
+LIST_API = 'https://www.toutiao.com/api/pc/feed/?'
+
+CONTENT_URL = 'https://m.toutiao.com/i{}/info/?'
+
+COMMENT_API = 'https://www.toutiao.com/api/comment/list/?'
+
+headers = {
+    'Host': 'www.toutiao.com',
+    'cookie': 'tt_webid=6671926853337499139; WEATHER_CITY=%E5%8C%97%E4%BA%AC; UM_distinctid=169af98f7173f9-0eb8ee59ff77c9-7a1b34-100200-169af98f71877c; tt_webid=6671926853337499139; csrftoken=0e2a6163cbc3e65c69e5fa46ac859dc8; _ga=GA1.2.1785891858.1553430338; login_flag=2ecae06e53bbe1652505e0f90529992a; sessionid=764b81fc33c9da5067c66b4c6b91392b; sid_tt=764b81fc33c9da5067c66b4c6b91392b; s_v_web_id=bb9c19729e2715375126c74276ddb3be; sso_uid_tt=5a92417706e138ccfff2f1786fb7b3eb; toutiao_sso_user=2a0b1aee0d4c2817f9e8173e34b9bf9a; uid_tt=8b3b61eddeff8508a075a4e4b39e73f0; sid_guard="764b81fc33c9da5067c66b4c6b91392b|1559295425|15552000|Wed\054 27-Nov-2019 09:37:05 GMT"; CNZZDATA1259612802=1292429429-1553425486-null%7C1559292983',
+    'User-Agent': '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36"',
+    'Referer': 'https://www.toutiao.com/ch/news_hot/',
+}
+
+headers_ = {
+    'accept': 'application/json, text/javascript',
+    'accept-encoding': 'gzip, deflate, br',
+    'accept-language': 'zh-CN,zh;q=0.9',
+    'content-type': 'application/x-www-form-urlencoded',
+    'referer': 'https://www.toutiao.com/c/user/6670378030/',
+    'cookie': 'tt_webid=6671926853337499139; WEATHER_CITY=%E5%8C%97%E4%BA%AC; UM_distinctid=169af98f7173f9-0eb8ee59ff77c9-7a1b34-100200-169af98f71877c; tt_webid=6671926853337499139; csrftoken=0e2a6163cbc3e65c69e5fa46ac859dc8; _ga=GA1.2.1785891858.1553430338; login_flag=2ecae06e53bbe1652505e0f90529992a; sessionid=764b81fc33c9da5067c66b4c6b91392b; sid_tt=764b81fc33c9da5067c66b4c6b91392b; s_v_web_id=bb9c19729e2715375126c74276ddb3be; sso_uid_tt=5a92417706e138ccfff2f1786fb7b3eb; toutiao_sso_user=2a0b1aee0d4c2817f9e8173e34b9bf9a; uid_tt=8b3b61eddeff8508a075a4e4b39e73f0; sid_guard="764b81fc33c9da5067c66b4c6b91392b|1559295425|15552000|Wed\054 27-Nov-2019 09:37:05 GMT"; CNZZDATA1259612802=1292429429-1553425486-null%7C1559292983',
+    'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.75 Mobile Safari/537.36',
+    'x-requested-with': 'XMLHttpRequest'
+}
+
+def selenium(max_behot_time_tmp):
+    """
+    selenium执行js获取列表页signature和cookies
+    :param max_behot_time_tmp:
+    :return:
+    """
+    # 进入浏览器设置
+    options = Options()
+    # 设置中文
+    options.add_argument('lang=zh_CN.UTF-8')
+    options.add_argument('--headless')
+    options.add_argument(
+        'user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36"')
+    # 设置代理
+    # service_args = ['--proxy={}'.format(func_proxy()['http']), '--proxy-type=socks5']
+    brower = webdriver.Chrome(options=options)
+
+    brower.get('https://www.toutiao.com/ch/news_hot/')
+    signature = brower.execute_script(f'return TAC.sign({max_behot_time_tmp})')
+    print(f'列表页signature参数：{signature}')
+
+    """获取cookie"""
+    cookie = brower.get_cookies()
+    cookie = [item['name'] + "=" + item['value'] for item in cookie]
+    cookies = '; '.join(item for item in cookie)
+    brower.quit()
+    # print(cookies)
+    return signature, cookies
+
+def get_as_cp():
+    """
+    获取请求参数as, cp
+    :return:
+    """
+    with open('as_cp.js', 'r') as f:
+        js = f.read()
+
+    ctx = execjs.compile(js)
+    as_cp = ctx.call('get_as_cp')
+    # print(as_cp)
+    as_ = as_cp['as']
+    cp = as_cp['cp']
+    return as_, cp
+
+def get_signature(item_id):
+    """
+    获取进入详情页所需signature参数
+    :return:
+    """
+    with open('zhengwen_signature.js', 'r') as f:
+        js = f.read()
+
+    ctx_ = execjs.compile(js)
+    signature = ctx_.call('get_signature', item_id)
+    print(f'详情页signature参数：{signature}')
+    return signature
+
+def req_news(max_behot_time_tmp):
+    """
+    请求热点新闻列表API
+    :param max_behot_time_tmp:
+    :return:
+    """
+    as_, cp = get_as_cp()
+    signature, cookies = selenium(max_behot_time_tmp)
+    params = {
+        'category': 'news_hot',
+        'utm_source': 'toutiao',
+        'widen': '1',
+        'max_behot_time': max_behot_time_tmp,
+        'max_behot_time_tmp': max_behot_time_tmp,
+        'tadrequire': 'true',
+        'as': as_,
+        'cp': cp,
+        '_signature': signature
+    }
+    headers.update({'cookie': cookies})
+    res = requests.get(LIST_API, params=params, headers=headers)
+    # print(res.json())
+    return res.json()
+
+def parse(result):
+    """
+    解析列表页
+    :param result:
+    :return:
+    """
+    list_ = result['data']
+    for li in list_:
+        info = li
+
+        # 进入文章详情页解析获取文章正文
+        item_id = li['item_id']
+        params = {
+            '_signature': get_signature(item_id),
+            'i': item_id
+        }
+        res = requests.get(CONTENT_URL.format(item_id), params=params, headers=headers_).json()
+        content = res['data']['content']
+        # print(content)
+        soup = BeautifulSoup(content, 'lxml')
+        info['content'] = soup.get_text()
+
+        # 进入评论API获取前30条热评
+        comments = []
+        for page in range(3):
+            params = {
+                'group_id': item_id,
+                'item_id': item_id,
+                'offset': str(page * 5),
+                'count': '10'
+            }
+            res = requests.get(COMMENT_API, params=params, headers=headers_).json()
+            items = res['data']['comments']
+            for item in items:
+                #print(item)
+                # 10位时间戳转化为时间
+                create_time = item['create_time']
+                create_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(create_time))
+                item.update({'create_time': create_time})
+                comments.append(item)
+        info['comments'] = comments
+        print(info)
+        mongodb(info)
+        print('=====' * 100)
+    max_behot_time = result['next']['max_behot_time']
+    return max_behot_time
+
+def mongodb(item):
+    """
+    存入MongoDB
+    :return:
+    """
+    client = pymongo.MongoClient(host='localhost', port=27017)
+    db = client.TouTiao
+    try:
+        db.news.insert(dict(item))
+        print('成功插入数据库')
+    except Exception as e:
+        print('插入数据库失败')
+
+def main():
+    max_behot_time_tmp = 0
+    while True:
+        #try:
+            result = req_news(max_behot_time_tmp)
+            max_behot_time_tmp = parse(result)
+            print(max_behot_time_tmp)
+            continue
+        #except Exception as e:
+        #    print(e.args)
+
+if __name__ == '__main__':
+    main()
+
+
+
+
