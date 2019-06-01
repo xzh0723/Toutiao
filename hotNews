@@ -189,8 +189,9 @@ def main():
             print(e.args)
 
 if __name__ == '__main__':
+    start = time.time()
+    startTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+    print('爬虫启动时间：', startTime)
     main()
-
-
-
-
+    print('耗时：', time.time() - start)
+    
