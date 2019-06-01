@@ -1,3 +1,3 @@
-成功展示
+成果展示
 ========
-![image](
+![image](https://github.com/xzh0723/Toutiao/blob/master/view.png)
